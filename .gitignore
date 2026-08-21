@@ -1,0 +1,11 @@
+.env
+*.pem
+service_account.json
+__pycache__/
+*.pyc
+.venv/
+*.egg-info/
+state.json
+revolut_csv/
+pytest-of-*/
+.pytest_cache/

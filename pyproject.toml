@@ -1,0 +1,17 @@
+[project]
+name = "bank-transfers-tracker"
+version = "0.1.0"
+description = "Reads incoming transfers from Wise and Revolut, writes to Google Sheets"
+requires-python = ">=3.10"
+dependencies = [
+    "requests>=2.31",
+    "gspread>=6.0",
+    "google-auth>=2.20",
+    "python-dotenv>=1.0",
+]
+
+[project.optional-dependencies]
+dev = [
+    "ruff>=0.4",
+    "pytest>=8.0",
+]

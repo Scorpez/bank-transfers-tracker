@@ -1,5 +1,7 @@
 # bank-transfers-tracker
 
+[![tests](https://github.com/sevamrk/bank-transfers-tracker/actions/workflows/ci.yml/badge.svg)](https://github.com/sevamrk/bank-transfers-tracker/actions/workflows/ci.yml)
+
 Pulls transactions from two banks that have nothing in common, works out what each one
 *was*, and keeps a spreadsheet in sync without creating duplicates.
 
@@ -18,8 +20,26 @@ Neither tells you what a transaction *meant*. A €1,500 transfer to your own ac
 income. A card payment to a supermarket is not worth its own row. Money arriving from the
 person you share a flat with is rent when it is large and utilities when it is small.
 
-So the work is not "call an API". It is: normalise two shapes into one, classify each row
+The work is not "call an API". It is: normalise two shapes into one, classify each row
 against rules that are personal by nature, and stay idempotent across re-runs.
+
+## How it works
+
+```mermaid
+flowchart TD
+    W["Wise<br/>REST, structured JSON"] --> N
+    R["Revolut<br/>CSV export, locale-shifting headers"] --> N
+    N["normalise to one shape"] --> C["classify against rules<br/>read from the environment, never from the code"]
+    C --> AGG["card spend, aggregated"]
+    C --> IND["transfers, kept individual"]
+    AGG --> DD["dedupe on a stable key"]
+    IND --> DD
+    DD --> SH["Google Sheet"]
+    SH -.->|"three-day overlap re-fetched every run,<br/>because banks backfill"| N
+```
+
+Running it twice produces the same sheet. That is the whole difficulty: the
+overlap window has to exist, and it has to not create duplicates.
 
 ## Design notes
 
@@ -43,7 +63,7 @@ you nothing. One monthly total does. Transfers between named people are the oppo
 ## Running it
 
 ```bash
-python -m venv .venv && source .venv/bin/activate
+python3 -m venv .venv && source .venv/bin/activate
 pip install -e .
 cp .env.example .env      # then fill it in
 python main.py --help
@@ -75,3 +95,41 @@ value is fabricated — the names are famous scientists, and the amounts are inv
 
 `RESEARCH.md` is kept deliberately. The interesting part of this project was discovering
 that Revolut's personal accounts have no API at all, which is what forced the CSV path.
+
+## Make it yours
+
+Four things, in this order:
+
+1. `.env` — the account names, the allowance amount, who pays rent and above what
+   threshold. All of it is yours and none of it is in the code.
+2. `src/revolut_client.py` — the column alias table. If your export is in a third
+   locale, add its headers here and nothing else changes.
+3. `src/sync.py` — the classification rules. They encode one household's idea of what
+   a transaction meant; yours will differ.
+4. `src/sheets.py` — the sheet layout, if you want different columns.
+
+## Limitations
+
+**Revolut still needs a human.** There is no personal API, so someone downloads a CSV
+and drops it in a folder. Everything after that is automatic, and that first step is
+not. A headless browser could do it and would break every time the export page moves.
+
+**It is single-user by construction.** One `.env`, one sheet, one set of rules. Making
+it multi-tenant means moving the rules into a store and keying everything by owner,
+which is a different program.
+
+**Classification is rules, not a model.** A transfer that is rent one month and a loan
+repayment the next needs a human to say so. Rules were the right call here — a
+misclassified row in your own accounts is worse than an unclassified one — but the
+ceiling is real.
+
+**Google Sheets is the weakest link.** It is the right output because it is what gets
+read, and it is the wrong store because a spreadsheet has no schema. The dedup key
+protects the rows; nothing protects a column somebody drags.
+
+## Provenance
+
+Written for my own accounts, then rewritten for publication. Every personal rule that
+used to be hardcoded is configuration now, which is both why it can be published and
+the better design. The fixtures are fabricated: the names are famous scientists and
+every amount is invented.

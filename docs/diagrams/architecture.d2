@@ -1,0 +1,23 @@
+# Two banks with nothing in common, one spreadsheet, run twice safely.
+# Rendered by `make diagrams`. Edit this file, never the .svg.
+
+direction: down
+
+wise: "Wise\nREST, structured JSON"
+rev: "Revolut\nCSV export, locale-shifting headers"
+norm: "normalise to one shape"
+cls: "classify against rules\nread from the environment, never from the code"
+agg: "card spend, aggregated"
+ind: "transfers, kept individual"
+dd: "dedupe on a stable key" { style.fill: "#eef4ff"; style.stroke: "#3a5a99"; style.font-color: "#1b2f52" }
+sheet: "Google Sheet" { style.fill: "#eaf6ec"; style.stroke: "#4a8a5c"; style.font-color: "#1e4429" }
+
+wise -> norm
+rev -> norm
+norm -> cls
+cls -> agg
+cls -> ind
+agg -> dd
+ind -> dd
+dd -> sheet
+sheet -> norm: "three-day overlap re-fetched\nevery run, because banks backfill" { style.stroke-dash: 4 }

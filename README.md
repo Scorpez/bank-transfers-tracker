@@ -5,56 +5,53 @@
 Pulls transactions from two banks that have nothing in common, works out what each one
 *was*, and keeps a spreadsheet in sync without creating duplicates.
 
-It is a small tool with an awkward problem underneath it, which is why it has tests.
+It's a small tool with an awkward problem underneath it, which is why it has tests.
+
+> **In 30 seconds**
+>
+> | | |
+> |---|---|
+> | **What it does** | Pulls from two banks with nothing in common, works out what each transaction meant, and keeps one sheet in sync |
+> | **The hard part** | Running it twice must not duplicate anything, and the overlap window that catches backfills is what makes that hard |
+> | **Why it is here** | It is not AI. Bank APIs, locale-shifting CSV, reconciliation, and tests on all of it |
+> | **What it admits** | Revolut has no personal API, so a human still downloads the file. Everything after that is automatic |
 
 ## The problem
 
 Personal finances spread across two providers give you two incompatible views:
 
 - **Wise** has a REST API, returns structured JSON, and knows a transfer's destination.
-- **Revolut** (personal accounts) has no API. You export a CSV — and the column headers,
+- **Revolut** (personal accounts) has no API. You export a CSV, and the column headers,
   the transaction-type words and the decimal punctuation all change with the account's
   locale.
 
-Neither tells you what a transaction *meant*. A €1,500 transfer to your own account is not
-income. A card payment to a supermarket is not worth its own row. Money arriving from the
-person you share a flat with is rent when it is large and utilities when it is small.
+Neither tells you what a transaction *meant*. A €1,500 transfer to your own account isn't
+income. A card payment to a supermarket isn't worth its own row. Money arriving from the
+person you share a flat with is rent when it's large and utilities when it's small.
 
-The work is not "call an API". It is: normalise two shapes into one, classify each row
+The work isn't "call an API". It's: normalise two shapes into one, classify each row
 against rules that are personal by nature, and stay idempotent across re-runs.
 
 ## How it works
 
-```mermaid
-flowchart TD
-    W["Wise<br/>REST, structured JSON"] --> N
-    R["Revolut<br/>CSV export, locale-shifting headers"] --> N
-    N["normalise to one shape"] --> C["classify against rules<br/>read from the environment, never from the code"]
-    C --> AGG["card spend, aggregated"]
-    C --> IND["transfers, kept individual"]
-    AGG --> DD["dedupe on a stable key"]
-    IND --> DD
-    DD --> SH["Google Sheet"]
-    SH -.->|"three-day overlap re-fetched every run,<br/>because banks backfill"| N
-```
+<img src="docs/diagrams/architecture.svg" alt="Two bank feeds normalise into one shape, get classified by rules read from the environment, aggregate or stay individual, dedupe on a stable key, and land in a Google Sheet" width="820">
 
-Running it twice produces the same sheet. That is the whole difficulty: the
+Running it twice produces the same sheet. That's the whole difficulty: the
 overlap window has to exist, and it has to not create duplicates.
 
 ## Design notes
 
 **Every personal rule is configuration, not code.** Which names count as your own, what a
-recurring allowance looks like, who pays you rent and above what threshold — all of it comes
-from the environment. The code ships knowing nothing about any particular person. That is
+recurring allowance looks like, who pays you rent and above what threshold. All of it comes
+from the environment. The code ships knowing nothing about any particular person. That's
 not decoration: the first version of this hardcoded real names and real amounts into
-`sync.py`, and it was the reason the repo could not be published.
+`sync.py`, and it was the reason the repo couldn't be published.
 
 **The CSV parser is locale-tolerant by construction.** Column names are matched through an
 alias table (`src/revolut_client.py`), rather than assuming an English export. The same file
 handles Russian and English statements without a flag.
 
-**Re-running is safe.** A three-day overlap window is re-fetched every sync deliberately —
-banks backfill — and rows are deduplicated on a stable key before anything is written
+**Re-running is safe.** A three-day overlap window is re-fetched every sync deliberately. Banks backfill, and rows are deduplicated on a stable key before anything is written
 (`src/state.py`, `src/sheets.py`). Running twice produces the same sheet.
 
 **Card spending aggregates; transfers stay individual.** Two hundred supermarket rows tell
@@ -69,7 +66,7 @@ cp .env.example .env      # then fill it in
 python main.py --help
 ```
 
-`.env` holds credentials and the personal classification rules. It is gitignored, and
+`.env` holds credentials and the personal classification rules. It's gitignored, and
 `.env.example` documents every value.
 
 ## Tests
@@ -80,7 +77,7 @@ pip install pytest && pytest
 
 35 tests. They cover the parts that break quietly rather than loudly: locale-dependent CSV
 parsing, the categorisation rules, deduplication, and aggregation arithmetic. Every fixture
-value is fabricated — the names are famous scientists, and the amounts are invented.
+value is fabricated, the names are famous scientists, and the amounts are invented.
 
 ## Layout
 
@@ -100,32 +97,22 @@ that Revolut's personal accounts have no API at all, which is what forced the CS
 
 Four things, in this order:
 
-1. `.env` — the account names, the allowance amount, who pays rent and above what
-   threshold. All of it is yours and none of it is in the code.
-2. `src/revolut_client.py` — the column alias table. If your export is in a third
+1. `.env`, the account names, the allowance amount, who pays rent and above what
+   threshold. All of it's yours and none of it's in the code.
+2. `src/revolut_client.py`, the column alias table. If your export is in a third
    locale, add its headers here and nothing else changes.
-3. `src/sync.py` — the classification rules. They encode one household's idea of what
+3. `src/sync.py`, the classification rules. They encode one household's idea of what
    a transaction meant; yours will differ.
-4. `src/sheets.py` — the sheet layout, if you want different columns.
+4. `src/sheets.py`, the sheet layout, if you want different columns.
 
 ## Limitations
 
-**Revolut still needs a human.** There is no personal API, so someone downloads a CSV
-and drops it in a folder. Everything after that is automatic, and that first step is
-not. A headless browser could do it and would break every time the export page moves.
-
-**It is single-user by construction.** One `.env`, one sheet, one set of rules. Making
-it multi-tenant means moving the rules into a store and keying everything by owner,
-which is a different program.
-
-**Classification is rules, not a model.** A transfer that is rent one month and a loan
-repayment the next needs a human to say so. Rules were the right call here — a
-misclassified row in your own accounts is worse than an unclassified one — but the
-ceiling is real.
-
-**Google Sheets is the weakest link.** It is the right output because it is what gets
-read, and it is the wrong store because a spreadsheet has no schema. The dedup key
-protects the rows; nothing protects a column somebody drags.
+| What it does not do | The detail |
+|---|---|
+| **Revolut still needs a human** | There is no personal API, so somebody downloads a CSV and drops it in a folder. Everything after that is automatic and that first step is not. A headless browser could do it and would break every time the export page moves |
+| **Single-user by construction** | One `.env`, one sheet, one set of rules. Multi-tenant means moving the rules into a store and keying everything by owner, which is a different program |
+| **Classification is rules, not a model** | A transfer that is rent one month and a loan repayment the next needs a human to say so. Rules were right here, because a misclassified row in your own accounts is worse than an unclassified one, but the ceiling is real |
+| **Google Sheets is the weakest link** | It is the right output because it is what gets read, and the wrong store because a spreadsheet has no schema. The dedup key protects the rows. Nothing protects a column somebody drags |
 
 ## Provenance
 
